@@ -10,6 +10,35 @@ This tool enables users to initiate and track each "CLIF project run" after rele
 - Sends weekly reminder notifications to each site PI that has not completed the project run
 - Tracks overall site responses and progress
 
+## 🚀 Getting Started
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Set the following environment variables for your Slack workspace:
+
+```
+SLACK_BOT_TOKEN=xxxx
+SLACK_SIGNING_SECRET=xxxx
+SLACK_APP_TOKEN=xxxx
+JOB_TRACKER_CHANNEL=#clif-job-tracker  # optional
+```
+
+3. Run the Bolt application:
+
+```bash
+python app.py
+```
+
+The app exposes three slash commands:
+
+- `/clif-run new <GitHub Repo>` – announce a new project run
+- `/clif-run status` – view a table of site responses
+- `/clif-poc <site> @user` – register a point-of-contact for a site
+
 ## 🧪 Status
 **Under active development.**  
 Expect rapid iteration and breaking changes. Contributions welcome!
