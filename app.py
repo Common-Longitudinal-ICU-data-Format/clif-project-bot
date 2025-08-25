@@ -164,6 +164,51 @@ def handle_clif_poc(ack, respond, command, client):
         respond(f"Error opening modal: {str(e)}")
 
 
+@app.command("/clif-help")
+def handle_clif_help(ack, command, client, respond):
+    """Open a modal for users to request CLIF assistance."""
+    ack()
+
+    modal_view = {
+        "type": "modal",
+        "callback_id": "clif_help_modal",
+        "title": {"type": "plain_text", "text": "Request CLIF Help"},
+        "submit": {"type": "plain_text", "text": "Submit Ticket"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": "summary_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "summary_input",
+                    "placeholder": {"type": "plain_text", "text": "Brief summary"},
+                },
+                "label": {"type": "plain_text", "text": "Summary"},
+            },
+            {
+                "type": "input",
+                "block_id": "details_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "details_input",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Describe your issue or question",
+                    },
+                },
+                "label": {"type": "plain_text", "text": "Details"},
+            },
+        ],
+    }
+
+    try:
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {str(e)}")
+
+
 @app.view("clif_project_modal")
 def handle_modal_submission(ack, body, client):
     ack()
@@ -264,7 +309,7 @@ def handle_modal_submission(ack, body, client):
                 }
             ]
         )
-        
+
     except Exception as e:
         print(f"Error posting announcement: {e}")
 
@@ -303,6 +348,30 @@ def handle_poc_modal_submission(ack, body, client):
         )
     except Exception as e:
         print(f"Error posting POC confirmation: {e}")
+
+
+@app.view("clif_help_modal")
+def handle_help_modal_submission(ack, body, client):
+    """Post submitted help requests to a dedicated channel."""
+    ack()
+
+    user_id = body["user"]["id"]
+    values = body["view"]["state"]["values"]
+    summary = values["summary_block"]["summary_input"]["value"]
+    details = values["details_block"]["details_input"]["value"]
+
+    channel = os.environ.get("HELP_CHANNEL", "#clif-help")
+    message = (
+        f"🆘 *CLIF Help Ticket*\n"
+        f"*Submitted by:* <@{user_id}>\n"
+        f"*Summary:* {summary}\n"
+        f"*Details:* {details}"
+    )
+
+    try:
+        client.chat_postMessage(channel=channel, text=message)
+    except Exception as e:
+        print(f"Error posting help ticket: {e}")
 
 
 @app.action("status_update")
