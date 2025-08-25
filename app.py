@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+import requests
 
 from clif_bot.metadata import parse_repo
 from clif_bot.state import StatusStore
@@ -73,6 +74,87 @@ def handle_clif_run(ack, respond, command, client):
         ]
     }
     
+    try:
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {str(e)}")
+
+
+@app.view("clif_issue_modal")
+def handle_issue_submission(ack, body, client):
+    ack()
+
+    user_id = body["user"]["id"]
+    values = body["view"]["state"]["values"]
+    title = values["title_block"]["title_input"]["value"]
+    description = (
+        values["description_block"]["description_input"].get("value") or ""
+    )
+
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        client.chat_postMessage(channel=user_id, text="GITHUB_TOKEN is not set.")
+        return
+
+    url = (
+        "https://api.github.com/repos/Common-Longitudinal-ICU-data-Format/CLIF/issues"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    payload = {"title": title, "body": description}
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 201:
+            issue_url = response.json().get("html_url")
+            client.chat_postMessage(channel=user_id, text=f"Issue created: {issue_url}")
+        else:
+            client.chat_postMessage(
+                channel=user_id,
+                text=f"Failed to create issue: {response.text}",
+            )
+    except Exception as e:
+        client.chat_postMessage(channel=user_id, text=f"Error creating issue: {e}")
+
+
+@app.command("/clif-issues")
+def handle_clif_issues(ack, respond, command, client):
+    ack()
+
+    modal_view = {
+        "type": "modal",
+        "callback_id": "clif_issue_modal",
+        "title": {"type": "plain_text", "text": "New CLIF Issue"},
+        "submit": {"type": "plain_text", "text": "Create Issue"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": "title_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "title_input",
+                    "placeholder": {"type": "plain_text", "text": "Enter issue title"},
+                },
+                "label": {"type": "plain_text", "text": "Title"},
+            },
+            {
+                "type": "input",
+                "block_id": "description_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "description_input",
+                    "multiline": True,
+                    "placeholder": {"type": "plain_text", "text": "Describe the issue"},
+                },
+                "label": {"type": "plain_text", "text": "Description"},
+                "optional": True,
+            },
+        ],
+    }
+
     try:
         client.views_open(trigger_id=command["trigger_id"], view=modal_view)
     except Exception as e:
