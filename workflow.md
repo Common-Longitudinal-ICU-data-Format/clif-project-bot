@@ -3,9 +3,21 @@
 This document outlines the user flow and internal process for initiating and tracking CLIF job run requests via Slack.
 
 ---
-## 0. Check active CLIF sites
 
-In version 0.1, the CLIF project bot will track runs across 11 CLIF sites and the MIMIC-IV database:
+## Overview
+
+The CLIF Project Bot streamlines federated CLIF project coordination across the consortium by:
+- Facilitating project releases through interactive modals
+- Automatically extracting project metadata from GitHub repositories
+- Managing site point-of-contact (POC) assignments
+- Tracking project status across all sites
+- Providing persistent data storage for all assignments and project states
+
+---
+
+## Active CLIF Sites
+
+The bot tracks runs across 12 CLIF sites and databases:
 
 1. University of Chicago
 2. Emory University
@@ -20,78 +32,117 @@ In version 0.1, the CLIF project bot will track runs across 11 CLIF sites and th
 11. University of Toronto
 12. MIMIC-IV
 
-In near future versions, the CLIF bot will automatically identify CLIF sites from https://clif-consortium.shinyapps.io/clif-cohort-dashboard/ daily to update this list.
+---
 
-A long run feature update could be automated running of the project against MIMIC-IV, however this will require additional data use and project modification considerations
+## Commands
 
-The point of contact (POC) for each CLIF Site will be designated with a command
+### `/clif-poc` - Assign Site Point of Contact
 
-`/clif-poc`
+Opens an interactive modal with:
+- **Site dropdown**: Select from all 12 CLIF sites
+- **User selector**: Choose any Slack user as POC
+- **Project field**: Optional project-specific assignment
 
-This will return a dropdown menu of active CLIF sites and a field to designate an active CLIF slack user with the (e.g. @user) 
+**Features:**
+- Persistent storage of all POC assignments
+- Support for multiple POCs per site
+- Project-specific or general site assignments
+- Confirmation messages posted to #project-tracker
+
+### `/clif-run` - Release New Project
+
+Opens an interactive modal collecting:
+- **GitHub Repository URL**: Link to the CLIF project repository
+- **Project Name**: Human-readable project name
+- **Result Box Link**: Link to results/data storage
+- **Special Instructions**: Optional additional guidance for sites
+
+**Automated Processing:**
+1. Scrapes GitHub repository for metadata and tables required
+2. Posts announcement in **#general** mentioning all registered POCs
+3. Posts detailed tracking information in **#project-tracker**
+4. Adds interactive status buttons for site responses
+
+### `/clif-status` - View Project Dashboard
+
+Displays a formatted table showing:
+- **Rows**: All 12 CLIF sites
+- **Columns**: All active projects (truncated names for readability)
+- **Status indicators**:
+  - ✅ Run Completed
+  - 🛠 In Progress  
+  - ❌ Will Not Participate
+  - ❓ No response
+
+The dashboard is posted publicly to #project-tracker for all users to view.
 
 ---
 
-## 1. Command Initiation
+## Workflow Process
 
-**Trigger:**  
-User issues the slash command:
+### 1. Project Release Flow
 
-`/clif-run new <GitHub Repo URL>`
+1. **User runs `/clif-run`**
+2. **Modal opens** requesting project details
+3. **User fills form** with GitHub URL, project name, result box, and instructions
+4. **Bot processes** by:
+   - Extracting tables required from repository README or metadata files
+   - Creating formatted announcement
+   - Storing project in persistent database
+5. **Bot posts to #general**:
+   ```
+   🚀 New CLIF Project Release 🚀
+   
+   @user has released code for [Project Name]!
+   
+   📊 Tables required: [extracted list]
+   📋 Result Box: [provided link] 
+   🔧 Special Instructions: [user input]
+   
+   🔗 Repository: [GitHub URL]
+   
+   @poc1 @poc2 @poc3: Please clone the repository and begin your analysis!
+   ```
+6. **Bot posts tracking info to #project-tracker** with status buttons
+7. **Sites can update status** using interactive buttons
 
-Example:  
-`/clif-run new https://github.com/Common-Longitudinal-ICU-data-Format/CLIF-eligibility-for-mobilization`
+### 2. POC Management Flow
+
+1. **User runs `/clif-poc`**
+2. **Modal opens** with site dropdown, user selector, and project field
+3. **User assigns POC** for specific site (and optionally specific project)
+4. **Bot saves assignment** to persistent JSON storage
+5. **Confirmation posted** to #project-tracker
+6. **POC gets tagged** in future project announcements
+
+### 3. Status Tracking Flow
+
+1. **User runs `/clif-status`**  
+2. **Bot generates formatted table** from stored project data
+3. **Table posted publicly** to #project-tracker showing all site statuses
+4. **Status updates persist** through bot restarts via JSON storage
 
 ---
 
-## 2. Repository Parsing
+## Data Persistence
 
-Once the command is received, the bot:
+All bot data is stored in `clif_bot_data.json`:
 
-- Clones or fetches the repository.
-- Reads structured metadata (e.g., `project.yaml` or `metadata.json`) when available:
-  - `project_name`
-  - `description`
-  - `tables_required`
-- If metadata is absent, extracts basic information from `README.md` as a fallback.
+```json
+{
+  "projects": {
+    "github_url": {
+      "metadata": {...},
+      "site_status": {"site": "status"}
+    }
+  },
+  "pocs": {"user_id": "site_name"},
+  "poc_assignments": {
+    "site": {"user_id": "project_or_general"}
+  }
+}
+```
 
----
-
-## 3. Slack Thread Creation
-
-The bot posts a message in #clif-job-tracker in the [CLIF Slack](clifworld.slack.com) with the extracted project details and pings the channels
-
-**Example message:**
-
-The bot then starts tracking site responses.
-
-📢 New CLIF Job Run Request
-
-- Project: Eligibility for Mobilization
-- Repo: <GitHub Repo URL>
-- Description: Determine which ICU patients meet mobilization eligibility criteria.
-- Tables Required: patient, hospitalization, vitals, patient_assessments
-
-Reply by clicking a button:
-– ✅ : Run Completed
-– 🛠 : In Progress
-– ❌ : Will Not Participate
-
----
-
-## 4. CLIF project status update
-
-Any user can query the status of all active CLIF projects with the following command
-
-`/clif-run status`
-
-This returns a dashboard table with columns that correspond to all active CLIF projects and rows that correspond to CLIF sites. Each cell has values:
-
-– ✅ : Run Completed
-– 🛠 : In Progress
-– ❌ : Will Not Participate
-- ❓: No response
-
-The bot will also post this weekly to the #clif-job-tracker and create a thread of reminder messages for sites that have not yet responded ❓. The reminder messages will have a reaction button option
+This ensures all project states, POC assignments, and status updates survive bot restarts and provide a complete audit trail.
 
 
