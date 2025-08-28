@@ -8,6 +8,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from clif_bot.metadata import parse_repo
 from clif_bot.state import StatusStore
+from clif_bot import mcide
 
 load_dotenv()
 
@@ -77,6 +78,146 @@ def handle_clif_run(ack, respond, command, client):
         client.views_open(trigger_id=command["trigger_id"], view=modal_view)
     except Exception as e:
         respond(f"Error opening modal: {str(e)}")
+
+
+@app.command("/mCIDE")
+def handle_mcide(ack, respond, command, client):
+    """Open modal for adding a new mCIDE category level."""
+    ack()
+    try:
+        tables = mcide.fetch_tables()
+        if not tables:
+            respond("No tables available.")
+            return
+        table_options = [
+            {"text": {"type": "plain_text", "text": t}, "value": t}
+            for t in tables
+        ]
+        table = tables[0]
+        variables = mcide.fetch_variables(table)
+        variable_options = [
+            {"text": {"type": "plain_text", "text": v}, "value": v}
+            for v in variables
+        ]
+        variable = variables[0] if variables else ""
+        values = mcide.fetch_category_values(table, variable) if variable else []
+
+        modal_view = {
+            "type": "modal",
+            "callback_id": "mcide_modal",
+            "title": {"type": "plain_text", "text": "mCIDE"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "table_block",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "mcide_table_select",
+                        "options": table_options,
+                        "initial_option": {
+                            "text": {"type": "plain_text", "text": table},
+                            "value": table,
+                        },
+                    },
+                    "label": {"type": "plain_text", "text": "CLIF Table"},
+                },
+                {
+                    "type": "input",
+                    "block_id": "variable_block",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "mcide_variable_select",
+                        "options": variable_options,
+                        "initial_option": {
+                            "text": {"type": "plain_text", "text": variable},
+                            "value": variable,
+                        } if variable else None,
+                    },
+                    "label": {"type": "plain_text", "text": "Category Variable"},
+                    "optional": False,
+                },
+                {
+                    "type": "section",
+                    "block_id": "values_block",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Existing values:* " + ", ".join(values) if values else "*Existing values:*",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "new_value_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "new_value",
+                    },
+                    "label": {"type": "plain_text", "text": "New Value"},
+                },
+            ],
+        }
+
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {e}")
+
+
+@app.action("mcide_table_select")
+def mcide_table_changed(ack, body, client):
+    ack()
+    table = body["actions"][0]["selected_option"]["value"]
+    variables = mcide.fetch_variables(table)
+    variable_options = [
+        {"text": {"type": "plain_text", "text": v}, "value": v}
+        for v in variables
+    ]
+    variable = variables[0] if variables else ""
+    values = mcide.fetch_category_values(table, variable) if variable else []
+
+    view = body["view"]
+    view["blocks"][1]["element"]["options"] = variable_options
+    if variable:
+        view["blocks"][1]["element"]["initial_option"] = {
+            "text": {"type": "plain_text", "text": variable},
+            "value": variable,
+        }
+    view["blocks"][2]["text"]["text"] = (
+        "*Existing values:* " + ", ".join(values) if values else "*Existing values:*"
+    )
+    client.views_update(
+        view_id=body["view"]["id"], hash=body["view"]["hash"], view=view
+    )
+
+
+@app.action("mcide_variable_select")
+def mcide_variable_changed(ack, body, client):
+    ack()
+    table = body["view"]["state"]["values"]["table_block"]["mcide_table_select"]["selected_option"]["value"]
+    variable = body["actions"][0]["selected_option"]["value"]
+    values = mcide.fetch_category_values(table, variable)
+    view = body["view"]
+    view["blocks"][2]["text"]["text"] = (
+        "*Existing values:* " + ", ".join(values) if values else "*Existing values:*"
+    )
+    client.views_update(
+        view_id=body["view"]["id"], hash=body["view"]["hash"], view=view
+    )
+
+
+@app.view("mcide_modal")
+def handle_mcide_submission(ack, body, client):
+    ack()
+    state = body["view"]["state"]["values"]
+    table = state["table_block"]["mcide_table_select"]["selected_option"]["value"]
+    variable = state["variable_block"]["mcide_variable_select"]["selected_option"]["value"]
+    new_value = state["new_value_block"]["new_value"]["value"]
+    user_id = body["user"]["id"]
+    try:
+        pr_url = mcide.update_category_csv(table, variable, new_value)
+        client.chat_postMessage(channel=user_id, text=f"Created PR: {pr_url}")
+    except Exception as e:
+        client.chat_postMessage(channel=user_id, text=f"Error updating categories: {e}")
 
 
 @app.command("/clif-status")
