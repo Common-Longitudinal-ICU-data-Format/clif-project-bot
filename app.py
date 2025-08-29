@@ -100,8 +100,8 @@ def handle_clif_status(ack, respond, command):
         respond(f"```\n{status_table}\n```")
 
 
-@app.command("/clif-poc")
-def handle_clif_poc(ack, respond, command, client):
+@app.command("/clif-site-poc")
+def handle_clif_site_poc(ack, respond, command, client):
     ack()
     
     # Create site options for dropdown
@@ -115,10 +115,28 @@ def handle_clif_poc(ack, respond, command, client):
             "value": site
         })
     
+    # Create project options from active projects
+    project_options = [
+        {
+            "text": {"type": "plain_text", "text": "General (all projects)"},
+            "value": "General"
+        }
+    ]
+    
+    # Add active projects to dropdown
+    for repo_url, project_status in store.projects.items():
+        project_name = project_status.metadata.project_name
+        # Truncate long project names for dropdown
+        display_name = project_name[:50] + "..." if len(project_name) > 50 else project_name
+        project_options.append({
+            "text": {"type": "plain_text", "text": display_name},
+            "value": project_name
+        })
+    
     # Open modal for POC assignment
     modal_view = {
         "type": "modal",
-        "callback_id": "clif_poc_modal",
+        "callback_id": "clif_site_poc_modal",
         "title": {"type": "plain_text", "text": "Assign Site POC"},
         "submit": {"type": "plain_text", "text": "Assign POC"},
         "close": {"type": "plain_text", "text": "Cancel"},
@@ -148,11 +166,12 @@ def handle_clif_poc(ack, respond, command, client):
                 "type": "input",
                 "block_id": "project_block",
                 "element": {
-                    "type": "plain_text_input",
-                    "action_id": "project_input",
-                    "placeholder": {"type": "plain_text", "text": "Optional: specify project name"}
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "Select a project"},
+                    "options": project_options,
+                    "action_id": "project_select"
                 },
-                "label": {"type": "plain_text", "text": "Project (optional)"},
+                "label": {"type": "plain_text", "text": "Project"},
                 "optional": True
             }
         ]
@@ -269,8 +288,8 @@ def handle_modal_submission(ack, body, client):
         print(f"Error posting announcement: {e}")
 
 
-@app.view("clif_poc_modal")
-def handle_poc_modal_submission(ack, body, client):
+@app.view("clif_site_poc_modal")
+def handle_site_poc_modal_submission(ack, body, client):
     ack()
     
     # Extract form data
@@ -278,7 +297,13 @@ def handle_poc_modal_submission(ack, body, client):
     
     site = values["site_block"]["site_select"]["selected_option"]["value"]
     user_id = values["user_block"]["user_select"]["selected_user"]
-    project = values["project_block"]["project_input"]["value"] or None
+    
+    # Handle project selection from dropdown (optional field)
+    project = None
+    if "project_block" in values and values["project_block"]["project_select"]["selected_option"]:
+        project = values["project_block"]["project_select"]["selected_option"]["value"]
+        if project == "General":
+            project = None  # Treat "General" as no specific project
     
     # Set the POC assignment
     store.set_poc(site, user_id, project)
@@ -291,7 +316,7 @@ def handle_poc_modal_submission(ack, body, client):
         user_name = f"<@{user_id}>"
     
     # Send confirmation message
-    project_text = f" for project '{project}'" if project else ""
+    project_text = f" for project '{project}'" if project else " (General)"
     confirmation_message = f"✅ {user_name} has been assigned as POC for {site}{project_text}"
     
     # Post confirmation to the channel

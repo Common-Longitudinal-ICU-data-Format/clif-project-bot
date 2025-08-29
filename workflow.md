@@ -36,12 +36,12 @@ The bot tracks runs across 12 CLIF sites and databases:
 
 ## Commands
 
-### `/clif-poc` - Assign Site Point of Contact
+### `/clif-site-poc` - Assign Site Point of Contact
 
 Opens an interactive modal with:
 - **Site dropdown**: Select from all 12 CLIF sites
 - **User selector**: Choose any Slack user as POC
-- **Project field**: Optional project-specific assignment
+- **Project dropdown**: Select from active projects or "General (all projects)"
 
 **Features:**
 - Persistent storage of all POC assignments
@@ -108,8 +108,8 @@ The dashboard is posted publicly to #project-tracker for all users to view.
 
 ### 2. POC Management Flow
 
-1. **User runs `/clif-poc`**
-2. **Modal opens** with site dropdown, user selector, and project field
+1. **User runs `/clif-site-poc`**
+2. **Modal opens** with site dropdown, user selector, and active projects dropdown
 3. **User assigns POC** for specific site (and optionally specific project)
 4. **Bot saves assignment** to persistent JSON storage
 5. **Confirmation posted** to #project-tracker
