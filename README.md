@@ -38,6 +38,7 @@ The app exposes three slash commands:
 - `/clif-run new <GitHub Repo>` – announce a new project run
 - `/clif-run status` – view a table of site responses
 - `/clif-poc <site> @user` – register a point-of-contact for a site
+- `/clif-issues` – create a new issue in the CLIF repository
 
 ## 🧪 Status
 **Under active development.**  
