@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+import requests
 
 from clif_bot.metadata import parse_repo
 from clif_bot.state import StatusStore
@@ -78,7 +79,6 @@ def handle_clif_run(ack, respond, command, client):
         client.views_open(trigger_id=command["trigger_id"], view=modal_view)
     except Exception as e:
         respond(f"Error opening modal: {str(e)}")
-
 
 @app.command("/mCIDE")
 def handle_mcide(ack, respond, command, client):
@@ -218,6 +218,86 @@ def handle_mcide_submission(ack, body, client):
         client.chat_postMessage(channel=user_id, text=f"Created PR: {pr_url}")
     except Exception as e:
         client.chat_postMessage(channel=user_id, text=f"Error updating categories: {e}")
+=======
+@app.view("clif_issue_modal")
+def handle_issue_submission(ack, body, client):
+    ack()
+
+    user_id = body["user"]["id"]
+    values = body["view"]["state"]["values"]
+    title = values["title_block"]["title_input"]["value"]
+    description = (
+        values["description_block"]["description_input"].get("value") or ""
+    )
+
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        client.chat_postMessage(channel=user_id, text="GITHUB_TOKEN is not set.")
+        return
+
+    url = (
+        "https://api.github.com/repos/Common-Longitudinal-ICU-data-Format/CLIF/issues"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    payload = {"title": title, "body": description}
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 201:
+            issue_url = response.json().get("html_url")
+            client.chat_postMessage(channel=user_id, text=f"Issue created: {issue_url}")
+        else:
+            client.chat_postMessage(
+                channel=user_id,
+                text=f"Failed to create issue: {response.text}",
+            )
+    except Exception as e:
+        client.chat_postMessage(channel=user_id, text=f"Error creating issue: {e}")
+
+
+@app.command("/clif-issues")
+def handle_clif_issues(ack, respond, command, client):
+    ack()
+
+    modal_view = {
+        "type": "modal",
+        "callback_id": "clif_issue_modal",
+        "title": {"type": "plain_text", "text": "New CLIF Issue"},
+        "submit": {"type": "plain_text", "text": "Create Issue"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": "title_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "title_input",
+                    "placeholder": {"type": "plain_text", "text": "Enter issue title"},
+                },
+                "label": {"type": "plain_text", "text": "Title"},
+            },
+            {
+                "type": "input",
+                "block_id": "description_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "description_input",
+                    "multiline": True,
+                    "placeholder": {"type": "plain_text", "text": "Describe the issue"},
+                },
+                "label": {"type": "plain_text", "text": "Description"},
+                "optional": True,
+            },
+        ],
+    }
+
+    try:
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {str(e)}")
 
 
 @app.command("/clif-status")
@@ -241,8 +321,8 @@ def handle_clif_status(ack, respond, command):
         respond(f"```\n{status_table}\n```")
 
 
-@app.command("/clif-poc")
-def handle_clif_poc(ack, respond, command, client):
+@app.command("/clif-site-poc")
+def handle_clif_site_poc(ack, respond, command, client):
     ack()
     
     # Create site options for dropdown
@@ -256,10 +336,28 @@ def handle_clif_poc(ack, respond, command, client):
             "value": site
         })
     
+    # Create project options from active projects
+    project_options = [
+        {
+            "text": {"type": "plain_text", "text": "General (all projects)"},
+            "value": "General"
+        }
+    ]
+    
+    # Add active projects to dropdown
+    for repo_url, project_status in store.projects.items():
+        project_name = project_status.metadata.project_name
+        # Truncate long project names for dropdown
+        display_name = project_name[:50] + "..." if len(project_name) > 50 else project_name
+        project_options.append({
+            "text": {"type": "plain_text", "text": display_name},
+            "value": project_name
+        })
+    
     # Open modal for POC assignment
     modal_view = {
         "type": "modal",
-        "callback_id": "clif_poc_modal",
+        "callback_id": "clif_site_poc_modal",
         "title": {"type": "plain_text", "text": "Assign Site POC"},
         "submit": {"type": "plain_text", "text": "Assign POC"},
         "close": {"type": "plain_text", "text": "Cancel"},
@@ -289,16 +387,62 @@ def handle_clif_poc(ack, respond, command, client):
                 "type": "input",
                 "block_id": "project_block",
                 "element": {
-                    "type": "plain_text_input",
-                    "action_id": "project_input",
-                    "placeholder": {"type": "plain_text", "text": "Optional: specify project name"}
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "Select a project"},
+                    "options": project_options,
+                    "action_id": "project_select"
                 },
-                "label": {"type": "plain_text", "text": "Project (optional)"},
+                "label": {"type": "plain_text", "text": "Project"},
                 "optional": True
             }
         ]
     }
     
+    try:
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {str(e)}")
+
+
+@app.command("/clif-help")
+def handle_clif_help(ack, command, client, respond):
+    """Open a modal for users to request CLIF assistance."""
+    ack()
+
+    modal_view = {
+        "type": "modal",
+        "callback_id": "clif_help_modal",
+        "title": {"type": "plain_text", "text": "Request CLIF Help"},
+        "submit": {"type": "plain_text", "text": "Submit Ticket"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": "summary_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "summary_input",
+                    "placeholder": {"type": "plain_text", "text": "Brief summary"},
+                },
+                "label": {"type": "plain_text", "text": "Summary"},
+            },
+            {
+                "type": "input",
+                "block_id": "details_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "details_input",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Describe your issue or question",
+                    },
+                },
+                "label": {"type": "plain_text", "text": "Details"},
+            },
+        ],
+    }
+
     try:
         client.views_open(trigger_id=command["trigger_id"], view=modal_view)
     except Exception as e:
@@ -405,13 +549,13 @@ def handle_modal_submission(ack, body, client):
                 }
             ]
         )
-        
+
     except Exception as e:
         print(f"Error posting announcement: {e}")
 
 
-@app.view("clif_poc_modal")
-def handle_poc_modal_submission(ack, body, client):
+@app.view("clif_site_poc_modal")
+def handle_site_poc_modal_submission(ack, body, client):
     ack()
     
     # Extract form data
@@ -419,7 +563,13 @@ def handle_poc_modal_submission(ack, body, client):
     
     site = values["site_block"]["site_select"]["selected_option"]["value"]
     user_id = values["user_block"]["user_select"]["selected_user"]
-    project = values["project_block"]["project_input"]["value"] or None
+    
+    # Handle project selection from dropdown (optional field)
+    project = None
+    if "project_block" in values and values["project_block"]["project_select"]["selected_option"]:
+        project = values["project_block"]["project_select"]["selected_option"]["value"]
+        if project == "General":
+            project = None  # Treat "General" as no specific project
     
     # Set the POC assignment
     store.set_poc(site, user_id, project)
@@ -432,7 +582,7 @@ def handle_poc_modal_submission(ack, body, client):
         user_name = f"<@{user_id}>"
     
     # Send confirmation message
-    project_text = f" for project '{project}'" if project else ""
+    project_text = f" for project '{project}'" if project else " (General)"
     confirmation_message = f"✅ {user_name} has been assigned as POC for {site}{project_text}"
     
     # Post confirmation to the channel
@@ -444,6 +594,30 @@ def handle_poc_modal_submission(ack, body, client):
         )
     except Exception as e:
         print(f"Error posting POC confirmation: {e}")
+
+
+@app.view("clif_help_modal")
+def handle_help_modal_submission(ack, body, client):
+    """Post submitted help requests to a dedicated channel."""
+    ack()
+
+    user_id = body["user"]["id"]
+    values = body["view"]["state"]["values"]
+    summary = values["summary_block"]["summary_input"]["value"]
+    details = values["details_block"]["details_input"]["value"]
+
+    channel = os.environ.get("HELP_CHANNEL", "#clif-help")
+    message = (
+        f"🆘 *CLIF Help Ticket*\n"
+        f"*Submitted by:* <@{user_id}>\n"
+        f"*Summary:* {summary}\n"
+        f"*Details:* {details}"
+    )
+
+    try:
+        client.chat_postMessage(channel=channel, text=message)
+    except Exception as e:
+        print(f"Error posting help ticket: {e}")
 
 
 @app.action("status_update")

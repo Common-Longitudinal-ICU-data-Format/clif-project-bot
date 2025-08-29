@@ -36,12 +36,12 @@ The bot tracks runs across 12 CLIF sites and databases:
 
 ## Commands
 
-### `/clif-poc` - Assign Site Point of Contact
+### `/clif-site-poc` - Assign Site Point of Contact
 
 Opens an interactive modal with:
 - **Site dropdown**: Select from all 12 CLIF sites
 - **User selector**: Choose any Slack user as POC
-- **Project field**: Optional project-specific assignment
+- **Project dropdown**: Select from active projects or "General (all projects)"
 
 **Features:**
 - Persistent storage of all POC assignments
@@ -76,6 +76,15 @@ Displays a formatted table showing:
 
 The dashboard is posted publicly to #project-tracker for all users to view.
 
+### `/clif-help` - Request CLIF Assistance
+
+Opens a simple form for submitting help requests.
+
+- **Summary**: Brief description of the issue
+- **Details**: Longer explanation or question (supports multiline input)
+
+Submitted tickets are posted to **#clif-help** (configurable via `HELP_CHANNEL`) so the CLIF team can follow up.
+
 ---
 
 ## Workflow Process
@@ -108,8 +117,8 @@ The dashboard is posted publicly to #project-tracker for all users to view.
 
 ### 2. POC Management Flow
 
-1. **User runs `/clif-poc`**
-2. **Modal opens** with site dropdown, user selector, and project field
+1. **User runs `/clif-site-poc`**
+2. **Modal opens** with site dropdown, user selector, and active projects dropdown
 3. **User assigns POC** for specific site (and optionally specific project)
 4. **Bot saves assignment** to persistent JSON storage
 5. **Confirmation posted** to #project-tracker
@@ -117,10 +126,17 @@ The dashboard is posted publicly to #project-tracker for all users to view.
 
 ### 3. Status Tracking Flow
 
-1. **User runs `/clif-status`**  
+1. **User runs `/clif-status`**
 2. **Bot generates formatted table** from stored project data
 3. **Table posted publicly** to #project-tracker showing all site statuses
 4. **Status updates persist** through bot restarts via JSON storage
+
+### 4. Help Ticket Flow
+
+1. **User runs `/clif-help`**
+2. **Modal opens** requesting a summary and detailed description of the issue
+3. **Bot posts ticket** to #clif-help with the user's information
+4. **Team members follow up** in the channel to resolve the request
 
 ---
 
