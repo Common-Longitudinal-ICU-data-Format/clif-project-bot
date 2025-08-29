@@ -39,6 +39,7 @@ class StatusStore:
         self.projects: Dict[str, ProjectStatus] = {}
         self.pocs: Dict[str, str] = {}  # user_id -> site name
         self.poc_assignments: Dict[str, Dict[str, str]] = {}  # site -> {user_id: project}
+        self.table_pocs: Dict[str, str] = {}  # table name -> user_id
         self.load_data()
 
     def load_data(self) -> None:
@@ -63,6 +64,7 @@ class StatusStore:
                 # Load POCs
                 self.pocs = data.get('pocs', {})
                 self.poc_assignments = data.get('poc_assignments', {})
+                self.table_pocs = data.get('table_pocs', {})
                 
             except Exception as e:
                 print(f"Error loading data: {e}")
@@ -73,7 +75,8 @@ class StatusStore:
             data = {
                 'projects': {},
                 'pocs': self.pocs,
-                'poc_assignments': self.poc_assignments
+                'poc_assignments': self.poc_assignments,
+                'table_pocs': self.table_pocs,
             }
             
             # Convert projects to serializable format
@@ -132,6 +135,16 @@ class StatusStore:
         if mentions:
             return " ".join(mentions)
         return "Site POCs"
+
+    # --- Table POC management ------------------------------------------
+    def set_table_poc(self, table: str, user_id: str) -> None:
+        """Assign a POC to a specific CLIF table."""
+        self.table_pocs[table] = user_id
+        self.save_data()
+
+    def get_table_poc(self, table: str) -> str | None:
+        """Get the POC user_id for a given table."""
+        return self.table_pocs.get(table)
 
     # --- Project tracking -----------------------------------------------
     def new_project(self, repo_url: str, metadata: ProjectMetadata) -> None:

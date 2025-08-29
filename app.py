@@ -404,6 +404,81 @@ def handle_clif_site_poc(ack, respond, command, client):
         respond(f"Error opening modal: {str(e)}")
 
 
+@app.command("/clif-table-poc")
+def handle_clif_table_poc(ack, respond, command, client):
+    ack()
+    try:
+        tables = mcide.fetch_tables()
+        if not tables:
+            respond("No tables available.")
+            return
+        table_options = [
+            {"text": {"type": "plain_text", "text": t}, "value": t} for t in tables
+        ]
+        table = tables[0]
+        poc_user = store.get_table_poc(table)
+        poc_text = (
+            f"*Current POC:* <@{poc_user}>" if poc_user else "*Current POC:* _Unassigned_"
+        )
+        modal_view = {
+            "type": "modal",
+            "callback_id": "clif_table_poc_modal",
+            "title": {"type": "plain_text", "text": "Table POC"},
+            "submit": {"type": "plain_text", "text": "Send"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "table_block",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "table_poc_table_select",
+                        "options": table_options,
+                        "initial_option": {
+                            "text": {"type": "plain_text", "text": table},
+                            "value": table,
+                        },
+                    },
+                    "label": {"type": "plain_text", "text": "CLIF Table"},
+                },
+                {
+                    "type": "section",
+                    "block_id": "poc_block",
+                    "text": {"type": "mrkdwn", "text": poc_text},
+                },
+                {
+                    "type": "input",
+                    "block_id": "question_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "question_input",
+                        "multiline": True,
+                    },
+                    "label": {"type": "plain_text", "text": "Question"},
+                },
+                {
+                    "type": "input",
+                    "block_id": "claim_block",
+                    "optional": True,
+                    "element": {
+                        "type": "checkboxes",
+                        "action_id": "claim_checkbox",
+                        "options": [
+                            {
+                                "text": {"type": "plain_text", "text": "Claim POC if unassigned"},
+                                "value": "claim",
+                            }
+                        ],
+                    },
+                    "label": {"type": "plain_text", "text": "POC Ownership"},
+                },
+            ],
+        }
+        client.views_open(trigger_id=command["trigger_id"], view=modal_view)
+    except Exception as e:
+        respond(f"Error opening modal: {e}")
+
+
 @app.command("/clif-help")
 def handle_clif_help(ack, command, client, respond):
     """Open a modal for users to request CLIF assistance."""
@@ -594,6 +669,56 @@ def handle_site_poc_modal_submission(ack, body, client):
         )
     except Exception as e:
         print(f"Error posting POC confirmation: {e}")
+
+
+@app.action("table_poc_table_select")
+def table_poc_table_changed(ack, body, client):
+    ack()
+    table = body["actions"][0]["selected_option"]["value"]
+    poc_user = store.get_table_poc(table)
+    poc_text = (
+        f"*Current POC:* <@{poc_user}>" if poc_user else "*Current POC:* _Unassigned_"
+    )
+    view = body["view"]
+    for block in view["blocks"]:
+        if block.get("block_id") == "poc_block":
+            block["text"]["text"] = poc_text
+    client.views_update(view_id=body["view"]["id"], hash=body["view"]["hash"], view=view)
+
+
+@app.view("clif_table_poc_modal")
+def handle_table_poc_modal_submission(ack, body, client):
+    ack()
+    state = body["view"]["state"]["values"]
+    table = state["table_block"]["table_poc_table_select"]["selected_option"]["value"]
+    question = state["question_block"]["question_input"]["value"]
+    claim_selected = bool(
+        state.get("claim_block", {})
+        .get("claim_checkbox", {})
+        .get("selected_options")
+    )
+    user_id = body["user"]["id"]
+    poc_user = store.get_table_poc(table)
+    if not poc_user and claim_selected:
+        store.set_table_poc(table, user_id)
+        poc_user = user_id
+        claim_msg = "You are now the POC for this table. "
+    else:
+        claim_msg = ""
+    if poc_user:
+        client.chat_postMessage(
+            channel=poc_user,
+            text=f"📥 Question about *{table}* from <@{user_id}>:\n{question}",
+        )
+        client.chat_postMessage(
+            channel=user_id,
+            text=f"{claim_msg}Your question has been sent to <@{poc_user}>.",
+        )
+    else:
+        client.chat_postMessage(
+            channel=user_id,
+            text="No POC is assigned to this table.",
+        )
 
 
 @app.view("clif_help_modal")
