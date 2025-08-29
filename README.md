@@ -39,6 +39,7 @@ The app exposes three slash commands:
 - `/clif-run status` – view a table of site responses
 - `/clif-poc <site> @user` – register a point-of-contact for a site
 - `/clif-issues` – create a new issue in the CLIF repository
+- `/clif-table-poc` – ask a question about a specific table and claim POC if needed
 
 ## 🧪 Status
 **Under active development.**  
